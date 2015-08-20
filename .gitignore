@@ -7,11 +7,33 @@
 # Precompiled Headers
 *.gch
 *.pch
+*.ipch
+
+# VS IDE files
+*.aps
+*.suo
+*.sdf
+*.opensdf
+*.idb
+*.pdb
+*.bsc
+*.user
+*.ilk
+*.log
+*.tlog
+*.tli
+*.tlh
+*.tlb
+*.lastbuildstate
+*.res
+*.manifest
+*_manifest.rc
 
 # Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
+*.ocx
 
 # Fortran module files
 *.mod
