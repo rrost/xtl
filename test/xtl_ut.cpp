@@ -8,14 +8,30 @@
 
 XTL_UT_TEST_SUITE_BEGIN(MySuite)
 
+    XTL_UT_SETUP()
+    {
+        std::cout << "setup" << std::endl;
+    }
+
+    XTL_UT_TEARDOWN()
+    {
+        std::cout << "teardown" << std::endl;
+    }
+
     XTL_UT_TEST_CASE(test1)
-    {}
+    {
+        std::cout << "Running test1" << std::endl;
+    }
 
     XTL_UT_TEST_CASE(test2)
-    {}
+    {
+        std::cout << "Running test2" << std::endl;
+    }
 
     XTL_UT_TEST_CASE(test3)
-    {}
+    {
+        std::cout << "Running test3" << std::endl;
+    }
 
 XTL_UT_TEST_SUITE_END(MySuite)
 

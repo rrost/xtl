@@ -60,10 +60,10 @@ namespace xtl
                 {
                     auto& cases = storage();
 
-                    const auto is_exists = [&new_case](const test_case& v)
+                    const auto already_exists = [&new_case](const test_case& v)
                     { return new_case.func_ == v.func_; };
 
-                    if(std::find_if(std::begin(cases), std::end(cases), is_exists)
+                    if(std::find_if(std::begin(cases), std::end(cases), already_exists)
                         == std::end(cases))
                     {
                         cases.push_back(new_case);
@@ -107,15 +107,30 @@ namespace xtl
             const string_type name_;
             const global_context_data& global_context_;
 
-            test_suite(const test_suite&) = delete;
-            test_suite& operator=(const test_suite&) = delete;
-
         protected:
-
             using base_type = details::test_case_registry<T> ;
+            using test_suite_type = typename base_type::test_suite_type;
             using test_case = typename base_type::test_case;
             using test_case_func = typename base_type::test_case_func;
-            
+            using init_func = void(test_suite_type::*)();
+            using deinit_func = void(test_suite_type::*)();
+
+            struct init_deinit
+            {
+                init_func setup_ = {};
+                deinit_func teardown_ = {};
+            }
+            init_deinit_suite_;
+
+            template <typename T>
+            struct assign_member
+            {
+                assign_member(T& obj, const T value)
+                {
+                    obj = value;
+                }
+            };
+
             const string_type& name() const
             {
                 return name_;
@@ -126,16 +141,52 @@ namespace xtl
                 return global_context_;
             }
 
+            test_suite_type& suite()
+            {
+                return *static_cast<test_suite_type*>(this);
+            }
+
             test_suite(const string_type& name);
 
+            struct suite_initializer
+            {
+                const init_deinit& init_deinit_;
+                test_suite_type& suite_;
+
+                suite_initializer(const suite_initializer&) = delete;
+                suite_initializer& operator=(const suite_initializer&) = delete;
+
+                suite_initializer(const init_deinit& funcs, test_suite_type& suite)
+                    : init_deinit_(funcs)
+                    , suite_(suite)
+                {
+                    if(init_deinit_.setup_)
+                        (suite_.*init_deinit_.setup_)();
+                }
+
+                ~suite_initializer()
+                {
+                    if(init_deinit_.teardown_)
+                        (suite_.*init_deinit_.teardown_)();
+                }
+            };
+
         public:
+
+            test_suite(const test_suite&) = delete;
+            test_suite& operator=(const test_suite&) = delete;
 
             virtual void run() override
             {
                 std::cout << "run: " << name() << std::endl;
 
-                for(test_case& t : base_type::storage())
-                    std::cout << " - " << t.name() << std::endl;
+                suite_initializer init(init_deinit_suite_, suite());
+                for(test_case& test : base_type::storage())
+                {
+                    std::cout << " - " << test.name() << std::endl;
+                    const auto func = test.func();
+                    (suite().*func)();
+                }
             }
 
         };
@@ -199,6 +250,16 @@ namespace xtl
             test_suite_manager::defaultManager().add_suite(*this);
         }
 
+#define XTL_UT_SETUP() \
+    static init_func setup_ptr() { return &setup; } \
+    const assign_member<init_func> setup_init = { init_deinit_suite_.setup_, setup_ptr() }; \
+    void setup()
+
+#define XTL_UT_TEARDOWN() \
+    static deinit_func teardown_ptr() { return &teardown; } \
+    const assign_member<deinit_func> teardown_init = { init_deinit_suite_.teardown_, teardown_ptr() }; \
+    void teardown()
+
 #define XTL_UT_TEST_CASE(name) \
     static test_case_func name##_ptr() { return &name; } \
     const test_case name##_case = { name##_ptr(), #name }; \
@@ -206,16 +267,16 @@ namespace xtl
 
 #define XTL_UT_TEST_CASE_DECLARE(name) XTL_UT_TEST_CASE(name);
 
-#define XTL_UT_TEST_CASE_DEFINE(name) void name()
+#define XTL_UT_TEST_CASE_DEFINE(suite, name) void suite::name()
 
 #define XTL_UT_TEST_SUITE_BEGIN(name) \
     class name: xtl::ut::test_suite<name> { \
     public: \
         using base_type = xtl::ut::test_suite<name>; \
         name(): base_type(#name) {} \
-    private: \
         name(const name&) = delete; \
-        name& operator=(const name&) = delete;
+        name& operator=(const name&) = delete; \
+    private:
 
 #define XTL_UT_TEST_SUITE_END(name) \
     } name##_suite;
