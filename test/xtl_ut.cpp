@@ -37,6 +37,5 @@ XTL_UT_TEST_SUITE_END(MySuite)
 
 int main(int argc, char* argv[])
 {
-    xtl::ut::test_suite_manager::defaultManager().run(argc, argv);
-    return 0;
+    return XTL_UT_RUN(argc, argv);
 }

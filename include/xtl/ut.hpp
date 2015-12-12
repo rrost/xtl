@@ -228,14 +228,14 @@ namespace xtl
                 test_suites_.push_back(suite);
             }
 
-            void run(int argc, char* argv[])
+            int run(int argc, char* argv[])
             {
                 parse_cmd_args(argc, argv);
-
                 for(test_suite_itf& test : test_suites_) test.run();
+                return 0;
             }
 
-            static test_suite_manager& defaultManager()
+            static test_suite_manager& instance()
             {
                 static test_suite_manager manager;
                 return manager;
@@ -245,9 +245,9 @@ namespace xtl
         template <class T>
         inline test_suite<T>::test_suite(const std::string& name)
             : name_(name)
-            , global_context_(test_suite_manager::defaultManager().context())
+            , global_context_(test_suite_manager::instance().context())
         {
-            test_suite_manager::defaultManager().add_suite(*this);
+            test_suite_manager::instance().add_suite(*this);
         }
 
 #define XTL_UT_SETUP() \
@@ -280,6 +280,8 @@ namespace xtl
 
 #define XTL_UT_TEST_SUITE_END(name) \
     } name##_suite;
+
+#define XTL_UT_RUN(argc, argv) xtl::ut::test_suite_manager::instance().run(argc, argv)
 
 } // namespace ut
 
