@@ -9,6 +9,8 @@
 #include <cassert>
 
 #include <algorithm>
+#include <exception>
+#include <stdexcept>
 #include <functional>
 #include <iostream>
 #include <string>
@@ -16,239 +18,289 @@
 
 namespace xtl
 {
+namespace ut
+{
+    class test_suite_manager;
 
-    namespace ut
+    using string_type = std::string;
+
+    template <typename T>
+    using ref_vector = std::vector<std::reference_wrapper<T> >;
+
+    struct global_context_data
     {
-        class test_suite_manager;
+        using arguments_container = std::vector<string_type>;
+        arguments_container arguments;
+    };
 
-        using string_type = std::string;
+    struct test_result
+    {
+        unsigned int line;
+        string_type file_name;
+        string_type suite_name;
+        string_type case_name;
+        string_type function_name;
+        string_type message;
+    };
+
+    struct test_suite_itf
+    {
+        virtual void run() = 0;
+    };
+
+    static inline const char* const to_pchar(const std::string& str)
+    {
+        return str.c_str();
+    }
+
+    struct fatal_error: std::exception
+    {
+        fatal_error(const string_type& msg): std::exception(to_pchar(msg)) {}
+    };
+
+    void raise_error(const string_type& msg)
+    {
+        throw fatal_error(msg);
+    }
+
+namespace details
+{
+
+    template <class T>
+    struct test_case_registry
+    {
+        using test_suite_type = T;
+        using this_type = test_case_registry<T>;
+        using test_case_func = void(test_suite_type::*)();
+
+        struct test_case;
+        using test_cases = ref_vector < test_case > ;
+
+        static test_cases& storage()
+        {
+            static test_cases cases;
+            return cases;
+        }
+
+        static void add_case(test_case& new_case)
+        {
+            auto& cases = storage();
+
+            const auto already_exists = [&new_case](const test_case& v)
+                { return new_case.func_ == v.func_; };
+
+            if(std::find_if(std::begin(cases), std::end(cases), already_exists)
+                == std::end(cases))
+            {
+                cases.push_back(new_case);
+            }
+        }
+
+        struct test_case
+        {
+            const test_case_func func_;
+            const string_type name_;
+
+            test_case(const test_case&) = delete;
+            test_case& operator=(const test_case&) = delete;
+
+            test_case(test_case_func func, const string_type& name)
+                : func_(func)
+                , name_(name)
+            {
+                this_type::add_case(*this);
+            }
+
+            const test_case_func& func() const
+            {
+                return func_;
+            }
+
+            const string_type& name() const
+            {
+                return name_;
+            }
+        };
+    };
+
+} // namespace details
+
+    template <class T>
+    class test_suite
+        : protected details::test_case_registry<T>
+        , public test_suite_itf
+    {
+    protected:
+        using base_type = details::test_case_registry<T>;
+        using test_suite_type = typename base_type::test_suite_type;
+        using test_case = typename base_type::test_case;
+        using test_case_func = typename base_type::test_case_func;
+        using init_func = void(test_suite_type::*)();
+        using deinit_func = void(test_suite_type::*)();
+
+        struct init_deinit
+        {
+            init_func setup_ = {};
+            deinit_func teardown_ = {};
+        }
+        init_deinit_suite_;
 
         template <typename T>
-        using ref_vector = std::vector < std::reference_wrapper<T> > ;
-
-        struct global_context_data
+        struct assign_member
         {
-            using arguments_container = std::vector < string_type > ;
-            arguments_container arguments;
-        };
-
-        struct test_suite_itf
-        {
-            virtual void run() = 0;
-        };
-
-        namespace details
-        {
-
-            template <class T>
-            struct test_case_registry
+            assign_member(T& obj, const T value)
             {
-                using test_suite_type = T;
-                using this_type = test_case_registry < T > ;
-                using test_case_func = void(test_suite_type::*)();
-
-                struct test_case;
-                using test_cases = ref_vector < test_case > ;
-
-                static test_cases& storage()
-                {
-                    static test_cases cases;
-                    return cases;
-                }
-
-                static void add_case(test_case& new_case)
-                {
-                    auto& cases = storage();
-
-                    const auto already_exists = [&new_case](const test_case& v)
-                    { return new_case.func_ == v.func_; };
-
-                    if(std::find_if(std::begin(cases), std::end(cases), already_exists)
-                        == std::end(cases))
-                    {
-                        cases.push_back(new_case);
-                    }
-                }
-
-                struct test_case
-                {
-                    const test_case_func func_;
-                    const string_type name_;
-
-                    test_case(const test_case&) = delete;
-                    test_case& operator=(const test_case&) = delete;
-
-                    test_case(test_case_func func, const string_type& name)
-                        : func_(func)
-                        , name_(name)
-                    {
-                        this_type::add_case(*this);
-                    }
-
-                    const test_case_func& func() const
-                    {
-                        return func_;
-                    }
-
-                    const string_type& name() const
-                    {
-                        return name_;
-                    }
-                };
-            };
-
-        } // namespace details
-
-        template <class T>
-        class test_suite
-            : protected details::test_case_registry<T>
-            , public test_suite_itf
-        {
-            const string_type name_;
-            const global_context_data& global_context_;
-
-        protected:
-            using base_type = details::test_case_registry<T> ;
-            using test_suite_type = typename base_type::test_suite_type;
-            using test_case = typename base_type::test_case;
-            using test_case_func = typename base_type::test_case_func;
-            using init_func = void(test_suite_type::*)();
-            using deinit_func = void(test_suite_type::*)();
-
-            struct init_deinit
-            {
-                init_func setup_ = {};
-                deinit_func teardown_ = {};
-            }
-            init_deinit_suite_;
-
-            template <typename T>
-            struct assign_member
-            {
-                assign_member(T& obj, const T value)
-                {
-                    obj = value;
-                }
-            };
-
-            const string_type& name() const
-            {
-                return name_;
-            }
-
-            const global_context_data& global_context() const
-            {
-                return global_context_;
-            }
-
-            test_suite_type& suite()
-            {
-                return *static_cast<test_suite_type*>(this);
-            }
-
-            test_suite(const string_type& name);
-
-            struct suite_initializer
-            {
-                const init_deinit& init_deinit_;
-                test_suite_type& suite_;
-
-                suite_initializer(const suite_initializer&) = delete;
-                suite_initializer& operator=(const suite_initializer&) = delete;
-
-                suite_initializer(const init_deinit& funcs, test_suite_type& suite)
-                    : init_deinit_(funcs)
-                    , suite_(suite)
-                {
-                    if(init_deinit_.setup_)
-                        (suite_.*init_deinit_.setup_)();
-                }
-
-                ~suite_initializer()
-                {
-                    if(init_deinit_.teardown_)
-                        (suite_.*init_deinit_.teardown_)();
-                }
-            };
-
-        public:
-
-            test_suite(const test_suite&) = delete;
-            test_suite& operator=(const test_suite&) = delete;
-
-            virtual void run() override
-            {
-                std::cout << "run: " << name() << std::endl;
-
-                suite_initializer init(init_deinit_suite_, suite());
-                for(test_case& test : base_type::storage())
-                {
-                    std::cout << " - " << test.name() << std::endl;
-                    const auto func = test.func();
-                    (suite().*func)();
-                }
-            }
-
-        };
-
-        class test_suite_manager
-        {
-            const string_type name_ = "Default XTL UT Manager";
-
-            global_context_data context_;
-
-            using test_suites = ref_vector < test_suite_itf > ;
-            test_suites test_suites_;
-
-            test_suite_manager()
-            {}
-
-            test_suite_manager(const test_suite_manager&) = delete;
-            test_suite_manager& operator=(const test_suite_manager&) = delete;
-
-            void parse_cmd_args(int argc, char* argv[])
-            {
-                argc; argv;
-            }
-
-        public:
-
-            const string_type& name() const
-            {
-                return name_;
-            }
-
-            const global_context_data& context() const
-            {
-                return context_;
-            }
-
-            void add_suite(test_suite_itf& suite)
-            {
-                test_suites_.push_back(suite);
-            }
-
-            int run(int argc, char* argv[])
-            {
-                parse_cmd_args(argc, argv);
-                for(test_suite_itf& test : test_suites_) test.run();
-                return 0;
-            }
-
-            static test_suite_manager& instance()
-            {
-                static test_suite_manager manager;
-                return manager;
+                obj = value;
             }
         };
 
-        template <class T>
-        inline test_suite<T>::test_suite(const std::string& name)
-            : name_(name)
-            , global_context_(test_suite_manager::instance().context())
+        const string_type& name() const
         {
-            test_suite_manager::instance().add_suite(*this);
+            return name_;
         }
+
+        const global_context_data& global_context() const
+        {
+            return global_context_;
+        }
+
+        const test_case* current_case() const
+        {
+            return current_case_;
+        }
+
+        test_suite_type& suite()
+        {
+            return *static_cast<test_suite_type*>(this);
+        }
+
+        test_suite(const string_type& name);
+
+        struct suite_initializer
+        {
+            const init_deinit& init_deinit_;
+            test_suite_type& suite_;
+
+            suite_initializer(const suite_initializer&) = delete;
+            suite_initializer& operator=(const suite_initializer&) = delete;
+
+            suite_initializer(const init_deinit& funcs, test_suite_type& suite)
+                : init_deinit_(funcs)
+                , suite_(suite)
+            {
+                if(init_deinit_.setup_)
+                    (suite_.*init_deinit_.setup_)();
+            }
+
+            ~suite_initializer()
+            {
+                if(init_deinit_.teardown_)
+                    (suite_.*init_deinit_.teardown_)();
+            }
+        };
+
+    public:
+
+        test_suite(const test_suite&) = delete;
+        test_suite& operator=(const test_suite&) = delete;
+
+        virtual void run() override
+        {
+            std::cout << "run: " << name() << std::endl;
+
+            suite_initializer init(init_deinit_suite_, suite());
+            for(test_case& test : base_type::storage())
+            {
+                std::cout << " - " << test.name() << std::endl;
+                current_case_ = &test;
+                const auto func = test.func();
+                (suite().*func)();
+            }
+
+            current_case_ = nullptr;
+        }
+
+    private:
+        const string_type name_;
+        const global_context_data& global_context_;
+        const test_case* current_case_ = nullptr;
+    };
+
+    class test_suite_manager
+    {
+        const string_type name_ = "XTL UT Manager";
+
+        global_context_data context_;
+
+        using test_suites = ref_vector<test_suite_itf>;
+        test_suites test_suites_;
+
+        const test_suite_itf* current_suite_ = nullptr;
+
+        test_suite_manager()
+        {}
+
+        test_suite_manager(const test_suite_manager&) = delete;
+        test_suite_manager& operator=(const test_suite_manager&) = delete;
+
+        void parse_cmd_args(int argc, char* argv[])
+        {
+            argc; argv;
+        }
+
+    public:
+
+        const string_type& name() const
+        {
+            return name_;
+        }
+
+        const global_context_data& context() const
+        {
+            return context_;
+        }
+
+        void add_suite(test_suite_itf& suite)
+        {
+            test_suites_.push_back(suite);
+        }
+
+        void add_result(const test_result& result)
+        {
+            if(!current_suite_)
+                raise_error("[XTL UT] Error adding test result: "
+                            "no unit test currently is running.");
+
+            result;
+        }
+
+        int run(int argc, char* argv[])
+        {
+            parse_cmd_args(argc, argv);
+            for(test_suite_itf& test : test_suites_)
+            {
+                current_suite_ = &test;
+                test.run();
+            }
+
+            current_suite_ = nullptr;
+            return 0;
+        }
+
+        static test_suite_manager& instance()
+        {
+            static test_suite_manager manager;
+            return manager;
+        }
+    };
+
+    template <class T>
+    inline test_suite<T>::test_suite(const std::string& name)
+        : name_(name)
+        , global_context_(test_suite_manager::instance().context())
+    {
+        test_suite_manager::instance().add_suite(*this);
+    }
 
 #define XTL_UT_SETUP() \
     static init_func setup_ptr() { return &setup; } \
@@ -270,13 +322,13 @@ namespace xtl
 #define XTL_UT_TEST_CASE_DEFINE(suite, name) void suite::name()
 
 #define XTL_UT_TEST_SUITE_BEGIN(name) \
-    class name: xtl::ut::test_suite<name> { \
-    public: \
-        using base_type = xtl::ut::test_suite<name>; \
-        name(): base_type(#name) {} \
-        name(const name&) = delete; \
-        name& operator=(const name&) = delete; \
-    private:
+class name: xtl::ut::test_suite<name> { \
+public: \
+    using base_type = xtl::ut::test_suite<name>; \
+    name(): base_type(#name) {} \
+    name(const name&) = delete; \
+    name& operator=(const name&) = delete; \
+private:
 
 #define XTL_UT_TEST_SUITE_END(name) \
     } name##_suite;
@@ -284,5 +336,4 @@ namespace xtl
 #define XTL_UT_RUN(argc, argv) xtl::ut::test_suite_manager::instance().run(argc, argv)
 
 } // namespace ut
-
 } // namespace xtl
