@@ -6,34 +6,35 @@
 
 #include "xtl/ut.hpp"
 
-XTL_UT_TEST_SUITE_BEGIN(MySuite)
+XTL_UT_SUITE(MySuite)
+{
 
     XTL_UT_SETUP()
     {
-        std::cout << "setup" << std::endl;
+        std::cout << __FUNCTION__ << std::endl;
     }
 
     XTL_UT_TEARDOWN()
     {
-        std::cout << "teardown" << std::endl;
+        std::cout << __FUNCTION__ << std::endl;
     }
 
-    XTL_UT_TEST_CASE(test1)
+    XTL_UT_CASE(test1)
     {
-        std::cout << "Running test1" << std::endl;
+        std::cout << "Test case: " << __FUNCTION__ << std::endl;
     }
 
-    XTL_UT_TEST_CASE(test2)
+    XTL_UT_CASE(test2)
     {
-        std::cout << "Running test2" << std::endl;
+        std::cout << "Test case: " << __FUNCTION__ << std::endl;
     }
 
-    XTL_UT_TEST_CASE(test3)
+    XTL_UT_CASE(test3)
     {
-        std::cout << "Running test3" << std::endl;
+        std::cout << "Test case: " << __FUNCTION__ << std::endl;
     }
 
-XTL_UT_TEST_SUITE_END(MySuite)
+};
 
 int main(int argc, char* argv[])
 {

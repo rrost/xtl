@@ -20,6 +20,14 @@ namespace xtl
 {
 namespace ut
 {
+    enum class result_type
+    {
+        ok,
+        fail,
+        error,
+        warning
+    };
+
     class test_suite_manager;
 
     using string_type = std::string;
@@ -35,6 +43,7 @@ namespace ut
 
     struct test_result
     {
+        result_type type;
         unsigned int line;
         string_type file_name;
         string_type suite_name;
@@ -131,6 +140,9 @@ namespace details
         , public test_suite_itf
     {
     protected:
+
+        test_suite(const string_type& name);
+
         using base_type = details::test_case_registry<T>;
         using test_suite_type = typename base_type::test_suite_type;
         using test_case = typename base_type::test_case;
@@ -173,8 +185,6 @@ namespace details
         {
             return *static_cast<test_suite_type*>(this);
         }
-
-        test_suite(const string_type& name);
 
         struct suite_initializer
         {
@@ -302,6 +312,15 @@ namespace details
         test_suite_manager::instance().add_suite(*this);
     }
 
+    template <class T>
+    class lazy_instance
+    {
+        const T* const p_;
+    public:
+        lazy_instance(): p_(new T()) {}
+        ~lazy_instance() { delete p_; }
+    };
+
 #define XTL_UT_SETUP() \
     static init_func setup_ptr() { return &setup; } \
     const assign_member<init_func> setup_init = { init_deinit_suite_.setup_, setup_ptr() }; \
@@ -312,26 +331,26 @@ namespace details
     const assign_member<deinit_func> teardown_init = { init_deinit_suite_.teardown_, teardown_ptr() }; \
     void teardown()
 
-#define XTL_UT_TEST_CASE(name) \
+#define XTL_UT_CASE(name) \
     static test_case_func name##_ptr() { return &name; } \
     const test_case name##_case = { name##_ptr(), #name }; \
     void name()
 
-#define XTL_UT_TEST_CASE_DECLARE(name) XTL_UT_TEST_CASE(name);
+#define XTL_UT_CASE_DECLARE(name) XTL_UT_TEST_CASE(name);
 
-#define XTL_UT_TEST_CASE_DEFINE(suite, name) void suite::name()
+#define XTL_UT_CASE_DEFINE(suite, name) void suite::name()
 
-#define XTL_UT_TEST_SUITE_BEGIN(name) \
-class name: xtl::ut::test_suite<name> { \
-public: \
-    using base_type = xtl::ut::test_suite<name>; \
-    name(): base_type(#name) {} \
-    name(const name&) = delete; \
-    name& operator=(const name&) = delete; \
-private:
-
-#define XTL_UT_TEST_SUITE_END(name) \
-    } name##_suite;
+#define XTL_UT_SUITE(name) \
+template <class T> struct name##_test_suite: xtl::ut::test_suite<T> \
+{ \
+    using base_type = xtl::ut::test_suite<T>; \
+    name##_test_suite(): base_type(#name) {} \
+    name##_test_suite(const name##_test_suite&) = delete; \
+    name##_test_suite& operator=(const name##_test_suite&) = delete; \
+}; \
+class name; \
+xtl::ut::lazy_instance<name> name##_inst; \
+class name: name##_test_suite<name> \
 
 #define XTL_UT_RUN(argc, argv) xtl::ut::test_suite_manager::instance().run(argc, argv)
 
