@@ -40,26 +40,35 @@ namespace xtl
         typedef array_type& array_reference;
         typedef const array_reference const_array_reference;
 
-        array_ref(array_reference ref): m_ref(ref)
+        // Zero size arrays are illegal in C++, but just for case ;-)
+        static_assert(Size > 0, "Zero size array not allowed");
+
+        array_ref(array_reference ref): ref_(ref)
         {
-            // Zero size arrays are illegal in C++, but just for case ;-)
-            static_assert(Size > 0, "Zero size array not allowed");
+        }
+
+        array_ref(const array_ref& rhs): ref_(rhs.ref_)
+        {
         }
 
         array_ref& operator=(const array_ref& rhs)
         {
-            std::copy(rhs.begin(), rhs.end(), begin());
+            if(&ref_ != &rhs.ref_)
+                std::copy(rhs.begin(), rhs.end(), begin());
             return *this;
         }
 
-        template<typename X, size_type OtherSize> array_ref& operator=(const array_ref<X, OtherSize>& rhs)
+        template<typename X, size_type OtherSize>
+        array_ref& operator=(const array_ref<X, OtherSize>& rhs)
         {
             const size_type size_to_copy = Size < OtherSize ? Size : OtherSize;
-            std::copy(rhs.begin(), rhs.begin() + size_to_copy, begin());
+            if(begin() != rhs.begin())
+                std::copy(rhs.begin(), rhs.begin() + size_to_copy, begin());
             return *this;
         }
 
-        template<typename X, size_type OtherSize> array_ref& operator=(const X(&rhs)[OtherSize])
+        template<typename X, size_type OtherSize>
+        array_ref& operator=(const X(&rhs)[OtherSize])
         {
             const size_type size_to_copy = Size < OtherSize ? Size : OtherSize;
             std::copy(rhs, rhs + size_to_copy, begin());
@@ -78,44 +87,44 @@ namespace xtl
 
         reference operator[](size_type index)
         {
-            return m_ref[index];
+            return ref_[index];
         }
 
         const_reference operator[](size_type index) const
         {
-            return m_ref[index];
+            return ref_[index];
         }
 
         reference at(size_type index)
         {
             check_index(index);
-            return m_ref[index];
+            return ref_[index];
         }
 
         const_reference at(size_type index) const
         {
             check_index(index);
-            return m_ref[index];
+            return ref_[index];
         }
 
         reference front()
         {
-            return m_ref[0];
+            return ref_[0];
         }
 
         const_reference front() const
         {
-            return m_ref[0];
+            return ref_[0];
         }
 
         reference back()
         {
-            return m_ref[Size - 1];
+            return ref_[Size - 1];
         }
 
         const_reference back() const
         {
-            return m_ref[Size - 1];
+            return ref_[Size - 1];
         }
 
         size_type size() const
@@ -135,32 +144,32 @@ namespace xtl
 
         const_iterator cbegin() const
         {
-            return m_ref;
+            return ref_;
         }
 
         const_iterator cend() const
         {
-            return m_ref + Size;
+            return ref_ + Size;
         }
 
         const_iterator begin() const
         {
-            return m_ref;
+            return ref_;
         }
 
         const_iterator end() const
         {
-            return m_ref + Size;
+            return ref_ + Size;
         }
 
         iterator begin()
         {
-            return m_ref;
+            return ref_;
         }
 
         iterator end()
         {
-            return m_ref + Size;
+            return ref_ + Size;
         }
 
         const_reverse_iterator crbegin()
@@ -183,7 +192,7 @@ namespace xtl
             return reverse_iterator(begin());
         }
 
-        bool is_valid_index(size_type index) const
+        bool valid_index(size_type index) const
         {
             return index < size();
         }
@@ -201,10 +210,10 @@ namespace xtl
 
         void check_index(size_t index)
         {
-            if(!is_valid_index(index)) throw std::out_of_range("xtl::array_ref - array index out of bounds");
+            if(!valid_index(index)) throw std::out_of_range("xtl::array_ref - array index out of bounds");
         }
 
-        array_reference m_ref; ///< Wrapped array reference
+        array_reference ref_; ///< Wrapped array reference
     };
 
     /// @brief     Wraps C array with array_ref deducing template arguments automatically.

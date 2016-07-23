@@ -5,6 +5,7 @@
 /// @date      20-Apr-2013
 
 #include "xtl/ut.hpp"
+#include "xtl/c_array.hpp"
 
 XTL_UT_SUITE(MySuite)
 {
@@ -18,6 +19,26 @@ XTL_UT_SUITE(MySuite)
     {
         std::cout << __FUNCTION__ << std::endl;
     }
+
+    XTL_UT_CASE(test1)
+    {
+        std::cout << "Test case: " << __FUNCTION__ << std::endl;
+    }
+
+    XTL_UT_CASE(test2)
+    {
+        std::cout << "Test case: " << __FUNCTION__ << std::endl;
+    }
+
+    XTL_UT_CASE(test3)
+    {
+        std::cout << "Test case: " << __FUNCTION__ << std::endl;
+    }
+
+};
+
+XTL_UT_SUITE(MySuite2)
+{
 
     XTL_UT_CASE(test1)
     {
