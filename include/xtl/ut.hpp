@@ -7,13 +7,17 @@
 #pragma once
 
 #include <cassert>
+#include <cstdint>
+#include <cstdlib>
 
 #include <algorithm>
 #include <exception>
 #include <stdexcept>
 #include <functional>
 #include <iostream>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace xtl
@@ -22,11 +26,25 @@ namespace ut
 {
     enum class result_type
     {
-        ok,
+        success,
         fail,
         error,
+        exception,
         warning
     };
+
+    inline const char* const to_string(result_type value)
+    {
+        switch (value)
+        {
+            case result_type::success:    return "OK";
+            case result_type::fail:       return "FAIL";
+            case result_type::error:      return "ERROR";
+            case result_type::exception:  return "EXCEPTION";
+            case result_type::warning:    return "WARNING";
+            default:                      return "UNKNOWN";
+        }
+    }
 
     class test_suite_manager;
 
@@ -50,6 +68,84 @@ namespace ut
         string_type case_name;
         string_type function_name;
         string_type message;
+        std::thread::id thread_id;
+
+        static test_result make_result(
+            result_type res_type,
+            unsigned int ln,
+            const string_type& f_name,
+            const string_type& s_name,
+            const string_type& c_name,
+            const string_type& fn_name,
+            const string_type& msg)
+        {
+            const test_result res =
+                { res_type, ln, f_name, s_name, c_name, fn_name, msg, std::this_thread::get_id() };
+            return res;
+        }
+
+        static test_result make_success(
+            unsigned int ln,
+            const string_type& f_name,
+            const string_type& s_name,
+            const string_type& c_name)
+        {
+            return make_result(result_type::success, ln, f_name, s_name, c_name, {}, {});
+        }
+
+        static test_result make_fail(
+            unsigned int ln,
+            const string_type& f_name,
+            const string_type& s_name,
+            const string_type& c_name,
+            const string_type& fn_name = {},
+            const string_type& msg = {})
+        {
+            return make_result(result_type::fail, ln, f_name, s_name, c_name, fn_name, msg);
+        }
+
+        static test_result make_error(
+            unsigned int ln,
+            const string_type& f_name,
+            const string_type& s_name,
+            const string_type& c_name,
+            const string_type& fn_name = {},
+            const string_type& msg = {})
+        {
+            return make_result(result_type::error, ln, f_name, s_name, c_name, fn_name, msg);
+        }
+
+        static test_result make_exception(
+            unsigned int ln,
+            const string_type& f_name,
+            const string_type& s_name,
+            const string_type& c_name,
+            const string_type& fn_name = {},
+            const string_type& msg = {})
+        {
+            return make_result(result_type::exception, ln, f_name, s_name, c_name, fn_name, msg);
+        }
+
+        static test_result make_warning(
+            unsigned int ln,
+            const string_type& f_name,
+            const string_type& s_name,
+            const string_type& c_name,
+            const string_type& fn_name = {},
+            const string_type& msg = {})
+        {
+            return make_result(result_type::warning, ln, f_name, s_name, c_name, fn_name, msg);
+        }
+
+        std::string to_string() const
+        {
+            return std::string(xtl::ut::to_string(type)) + " " + 
+                suite_name + "::" + case_name + 
+                (function_name.empty() ? "" : ", " + function_name + "()") + 
+                " at " + file_name + ", line " + std::to_string(line) + 
+                (message.empty() ? "" : " - " +  message);
+        }
+
     };
 
     struct test_suite_itf
@@ -67,9 +163,16 @@ namespace ut
         fatal_error(const string_type& msg): std::exception(to_pchar(msg)) {}
     };
 
-    void raise_error(const string_type& msg)
+    static inline void raise_error(const string_type& msg)
     {
         throw fatal_error(msg);
+    }
+
+    struct abort_exception {};
+
+    static inline void abort_test()
+    {
+        throw abort_exception();
     }
 
 namespace details
@@ -82,8 +185,8 @@ namespace details
         using this_type = test_case_registry<T>;
         using test_case_func = void(test_suite_type::*)();
 
-        struct test_case;
-        using test_cases = ref_vector < test_case > ;
+        class test_case;
+        using test_cases = ref_vector<test_case>;
 
         static test_cases& storage()
         {
@@ -96,26 +199,36 @@ namespace details
             auto& cases = storage();
 
             const auto already_exists = [&new_case](const test_case& v)
-                { return new_case.func_ == v.func_; };
+                { return new_case.func() == v.func(); };
 
-            if(std::find_if(std::begin(cases), std::end(cases), already_exists)
+            if (std::find_if(std::begin(cases), std::end(cases), already_exists)
                 == std::end(cases))
             {
                 cases.push_back(new_case);
             }
         }
 
-        struct test_case
+        class test_case
         {
             const test_case_func func_;
             const string_type name_;
+            const string_type file_;
+            const int line_;
+
+        public:
 
             test_case(const test_case&) = delete;
             test_case& operator=(const test_case&) = delete;
 
-            test_case(test_case_func func, const string_type& name)
+            test_case(
+                test_case_func func,
+                const string_type& name,
+                const string_type& file,
+                const int line)
                 : func_(func)
                 , name_(name)
+                , file_(file)
+                , line_(line)
             {
                 this_type::add_case(*this);
             }
@@ -128,6 +241,16 @@ namespace details
             const string_type& name() const
             {
                 return name_;
+            }
+
+            const string_type& file() const
+            {
+                return file_;
+            }
+
+            const int line() const
+            {
+                return line_;
             }
         };
     };
@@ -198,16 +321,20 @@ namespace details
                 : init_deinit_(funcs)
                 , suite_(suite)
             {
-                if(init_deinit_.setup_)
+                if (init_deinit_.setup_)
                     (suite_.*init_deinit_.setup_)();
             }
 
             ~suite_initializer()
             {
-                if(init_deinit_.teardown_)
+                if (init_deinit_.teardown_)
                     (suite_.*init_deinit_.teardown_)();
             }
         };
+
+        void add_success(const test_case& test);
+        void add_error(const test_case& test, const string_type& msg = {});
+        void add_exception(const test_case& test, const string_type& msg = {});
 
     public:
 
@@ -216,15 +343,35 @@ namespace details
 
         virtual void run() override
         {
-            std::cout << "run: " << name() << std::endl;
-
             suite_initializer init(init_deinit_suite_, suite());
-            for(test_case& test : base_type::storage())
+            for (test_case& test : base_type::storage())
             {
-                std::cout << " - " << test.name() << std::endl;
-                current_case_ = &test;
-                const auto func = test.func();
-                (suite().*func)();
+                try
+                {
+                    current_case_ = &test;
+                    const auto func = test.func();
+                    (suite().*func)();
+
+                    add_success(test);
+                }
+                catch (fatal_error& e)
+                {
+                    // Re-throw fatal error to upper level.
+                    add_error(test, e.what());
+                    throw e;
+                }
+                catch (abort_exception&)
+                {
+                    // Nothing to do, test case just aborted.
+                }
+                catch (std::exception& e)
+                {
+                    add_exception(test, e.what());
+                }
+                catch (...)
+                {
+                    add_exception(test, "Unhandled exception");
+                }
             }
 
             current_case_ = nullptr;
@@ -244,6 +391,9 @@ namespace details
 
         using test_suites = ref_vector<test_suite_itf>;
         test_suites test_suites_;
+
+        std::mutex lock_results_;
+        std::vector<test_result> results_;
 
         const test_suite_itf* current_suite_ = nullptr;
 
@@ -275,26 +425,70 @@ namespace details
             test_suites_.push_back(suite);
         }
 
-        void add_result(const test_result& result)
+        void add_result(test_result&& result)
         {
-            if(!current_suite_)
-                raise_error("[XTL UT] Error adding test result: "
-                            "no unit test currently is running.");
+            if (!current_suite_)
+            {
+                std::string msg =
+                    "[XTL UT] Error adding test result: "
+                    "no unit test currently is running.";
+                msg += " [";
+                msg += result.to_string();
+                msg += "]";
+                raise_error(msg);
+            }
 
-            result;
+            {
+                std::lock_guard<std::mutex> lock(lock_results_);
+                results_.push_back(std::move(result));
+            }
+        }
+
+        auto& log()
+        {
+            // TODO: replace by multi-target logging.
+            return std::cout;
+        }
+
+        int process_results()
+        {
+            for (const auto& r : results_)
+                log() << r.to_string() << std::endl;
+
+            return EXIT_SUCCESS;
         }
 
         int run(int argc, char* argv[])
         {
-            parse_cmd_args(argc, argv);
-            for(test_suite_itf& test : test_suites_)
+            try
             {
-                current_suite_ = &test;
-                test.run();
+                parse_cmd_args(argc, argv);
+
+                for (test_suite_itf& test : test_suites_)
+                {
+                    current_suite_ = &test;
+                    test.run();
+                }
+
+                current_suite_ = nullptr;
+            }
+            catch (fatal_error&)
+            {
+                // Nothing to do, just abort testing.
+            }
+            catch (...)
+            {
+                results_.push_back(
+                    test_result::make_exception(
+                        0,
+                        __FILE__,
+                        "test_suite_manager",
+                        __FUNCTION__,
+                        {},
+                        "Unhandled exception"));
             }
 
-            current_suite_ = nullptr;
-            return 0;
+            return process_results();
         }
 
         static test_suite_manager& instance()
@@ -310,6 +504,27 @@ namespace details
         , global_context_(test_suite_manager::instance().context())
     {
         test_suite_manager::instance().add_suite(*this);
+    }
+
+    template <class T>
+    inline void test_suite<T>::add_success(const test_case& test)
+    {
+        test_suite_manager::instance().add_result(
+            test_result::make_success(test.line(), test.file(), name(), test.name()));
+    }
+
+    template <class T>
+    inline void test_suite<T>::add_error(const test_case& test, const string_type& msg)
+    {
+        test_suite_manager::instance().add_result(
+            test_result::make_error(test.line(), test.file(), name(), test.name(), {}, msg));
+    }
+
+    template <class T>
+    inline void test_suite<T>::add_exception(const test_case& test, const string_type& msg)
+    {
+        test_suite_manager::instance().add_result(
+            test_result::make_exception(test.line(), test.file(), name(), test.name(), {}, msg));
     }
 
     template <class T>
@@ -333,7 +548,7 @@ namespace details
 
 #define XTL_UT_CASE(name) \
     static test_case_func name##_ptr() { return &name; } \
-    const test_case name##_case = { name##_ptr(), #name }; \
+    const test_case name##_case = { name##_ptr(), #name, __FILE__, __LINE__ }; \
     void name()
 
 #define XTL_UT_CASE_DECLARE(name) XTL_UT_TEST_CASE(name);

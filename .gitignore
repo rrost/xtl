@@ -48,3 +48,4 @@
 *.exe
 *.out
 *.app
+/test/.vs/xtl_ut/v15

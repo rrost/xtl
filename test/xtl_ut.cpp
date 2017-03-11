@@ -42,7 +42,9 @@ XTL_UT_SUITE(MySuite2)
 
     XTL_UT_CASE(test1)
     {
-        std::cout << "Test case: " << __FUNCTION__ << std::endl;
+        std::cout << "Test case: " << __FUNCTION__ << " at " 
+            << current_case()->file() << ", ln " << current_case()->line() << std::endl;
+        throw 0;
     }
 
     XTL_UT_CASE(test2)
