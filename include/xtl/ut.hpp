@@ -12,10 +12,10 @@
 
 #include <algorithm>
 #include <exception>
-#include <stdexcept>
 #include <functional>
 #include <iostream>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -137,23 +137,36 @@ namespace ut
             return make_result(result_type::warning, ln, f_name, s_name, c_name, fn_name, msg);
         }
 
-        std::string to_string() const
+        string_type to_string() const
         {
-            return std::string(xtl::ut::to_string(type)) + " " + 
-                suite_name + "::" + case_name + 
-                (function_name.empty() ? "" : ", " + function_name + "()") + 
+            return string_type(xtl::ut::to_string(type)) + " " +
+                (has_function_name() ? 
+                    full_case_name() + ", " + function_name + "()" :
+                    full_case_name()) +
                 " at " + file_name + ", line " + std::to_string(line) + 
                 (message.empty() ? "" : " - " +  message);
+        }
+
+        const string_type full_case_name() const
+        {
+            return suite_name + "::" + case_name;
+        }
+
+        bool has_function_name() const
+        {
+            return !function_name.empty() && function_name != full_case_name();
         }
 
     };
 
     struct test_suite_itf
     {
+        virtual const string_type& suite_name() const = 0;
+        virtual const string_type& case_name() const = 0;
         virtual void run() = 0;
     };
 
-    static inline const char* const to_pchar(const std::string& str)
+    static inline const char* const to_pchar(const string_type& str)
     {
         return str.c_str();
     }
@@ -341,6 +354,23 @@ namespace details
         test_suite(const test_suite&) = delete;
         test_suite& operator=(const test_suite&) = delete;
 
+        virtual const string_type& suite_name() const override
+        {
+            return name();
+        }
+
+        virtual const string_type& case_name() const override
+        {
+            if (!current_case_)
+            {
+                raise_error(
+                    "[XTL UT] Error getting current test case name: "
+                    "no unit test currently is running.");
+            }
+
+            return current_case_->name();
+        }
+
         virtual void run() override
         {
             suite_initializer init(init_deinit_suite_, suite());
@@ -415,6 +445,18 @@ namespace details
             return name_;
         }
 
+        const test_suite_itf& current_suite() const
+        {
+            if (!current_suite_)
+            {
+                raise_error(
+                    "[XTL UT] Error getting current suite: "
+                    "no unit test currently is running.");
+            }
+
+            return *current_suite_;
+        }
+
         const global_context_data& context() const
         {
             return context_;
@@ -429,7 +471,7 @@ namespace details
         {
             if (!current_suite_)
             {
-                std::string msg =
+                string_type msg =
                     "[XTL UT] Error adding test result: "
                     "no unit test currently is running.";
                 msg += " [";
@@ -499,7 +541,7 @@ namespace details
     };
 
     template <class T>
-    inline test_suite<T>::test_suite(const std::string& name)
+    inline test_suite<T>::test_suite(const string_type& name)
         : name_(name)
         , global_context_(test_suite_manager::instance().context())
     {
@@ -568,6 +610,20 @@ xtl::ut::lazy_instance<name> name##_inst; \
 class name: name##_test_suite<name> \
 
 #define XTL_UT_RUN(argc, argv) xtl::ut::test_suite_manager::instance().run(argc, argv)
+
+#define XTL_UT_ASSERT(exp, fatal) \
+if (!(exp)) \
+{ \
+    using namespace xtl::ut; \
+    const auto& s = test_suite_manager::instance().current_suite(); \
+    test_suite_manager::instance().add_result( \
+        test_result::make_fail(__LINE__, __FILE__, s.suite_name(), s.case_name(), \
+            __FUNCTION__, "Assertion failed: " #exp)); \
+    if ((fatal)) abort_test(); \
+} \
+
+#define XTL_UT_REQUIRE(exp) XTL_UT_ASSERT(exp, true)
+#define XTL_UT_CHECK(exp) XTL_UT_ASSERT(exp, false)
 
 } // namespace ut
 } // namespace xtl

@@ -37,6 +37,12 @@ XTL_UT_SUITE(MySuite)
 
 };
 
+void external_check()
+{
+    int x = 0;
+    XTL_UT_REQUIRE(x == 42);
+}
+
 XTL_UT_SUITE(MySuite2)
 {
 
@@ -49,11 +55,14 @@ XTL_UT_SUITE(MySuite2)
 
     XTL_UT_CASE(test2)
     {
+        int x = 0;
+        XTL_UT_REQUIRE(x == 1);
         std::cout << "Test case: " << __FUNCTION__ << std::endl;
     }
 
     XTL_UT_CASE(test3)
     {
+        external_check();
         std::cout << "Test case: " << __FUNCTION__ << std::endl;
     }
 
