@@ -23,22 +23,22 @@ namespace xtl
     public:
 
         /// @brief Standard container typedefs: value, reference, pointer, iterator
-        typedef size_t size_type;
-        typedef ptrdiff_t difference_type;
-        typedef T value_type;
-        typedef T& reference;
-        typedef const T& const_reference;
-        typedef T* pointer;
-        typedef const T* const_pointer;
-        typedef T* iterator;
-        typedef const T* const_iterator;
-        typedef std::reverse_iterator<iterator> reverse_iterator;
-        typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
+        using size_type = size_t;
+        using difference_type = ptrdiff_t;
+        using value_type = T;
+        using reference = T&;
+        using const_reference = const T&;
+        using pointer = T*;
+        using const_pointer = const T*;
+        using iterator = T*;
+        using const_iterator = const T*;
+        using reverse_iterator = std::reverse_iterator<iterator>;
+        using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
         /// @brief Wrapped array typedefs
-        typedef T(array_type)[Size];
-        typedef array_type& array_reference;
-        typedef const array_reference const_array_reference;
+        using array_type = T[Size];
+        using array_reference = array_type&;
+        using const_array_reference = const array_reference;
 
         // Zero size arrays are illegal in C++, but just for case ;-)
         static_assert(Size > 0, "Zero size array not allowed");
@@ -53,7 +53,7 @@ namespace xtl
 
         array_ref& operator=(const array_ref& rhs)
         {
-            if(&ref_ != &rhs.ref_)
+            if (&ref_ != &rhs.ref_)
                 std::copy(rhs.begin(), rhs.end(), begin());
             return *this;
         }
@@ -62,7 +62,7 @@ namespace xtl
         array_ref& operator=(const array_ref<X, OtherSize>& rhs)
         {
             const size_type size_to_copy = Size < OtherSize ? Size : OtherSize;
-            if(begin() != rhs.begin())
+            if (begin() != rhs.begin())
                 std::copy(rhs.begin(), rhs.begin() + size_to_copy, begin());
             return *this;
         }
@@ -200,7 +200,7 @@ namespace xtl
         bool find_index(const_reference item, size_type& item_index) const
         {
             const const_iterator found = std::find(cbegin(), cend(), item);
-            if(found == cend()) return false;
+            if (found == cend()) return false;
 
             item_index = found - cbegin(); // Assuming ptrdiff_t is compatible with size_type
             return true;
@@ -210,7 +210,8 @@ namespace xtl
 
         void check_index(size_t index)
         {
-            if(!valid_index(index)) throw std::out_of_range("xtl::array_ref - array index out of bounds");
+            if (!valid_index(index))
+                throw std::out_of_range("xtl::array_ref - array index out of bounds");
         }
 
         array_reference ref_; ///< Wrapped array reference
@@ -222,7 +223,7 @@ namespace xtl
     /// @param[in] ref  reference to source array to be wrapped
     /// @retval    array_ref<T, Size> instance wrapping the source array
     template <typename T, size_t Size>
-    array_ref<T, Size> make_array_ref(T(&ref)[Size])
+    array_ref<T, Size> make_array_ref(T (&ref)[Size])
     {
         return array_ref<T, Size>(ref);
     }
@@ -236,7 +237,7 @@ namespace xtl
     template <size_t Size, typename T>
     array_ref<T, Size> make_array_ref(T* ptr)
     {
-        typedef array_ref<T, Size> arr_ref;
+        using arr_ref = array_ref<T, Size>;
         return arr_ref(reinterpret_cast<arr_ref::array_reference>(*ptr));
     }
 
